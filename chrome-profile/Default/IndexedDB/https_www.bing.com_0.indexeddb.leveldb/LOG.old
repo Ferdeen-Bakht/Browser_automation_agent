@@ -1,0 +1,15 @@
+2026/11/12-18:25:10.224 3dec Reusing MANIFEST C:\Users\User\projects\AI_automation_on_browser\chrome-profile\Default\IndexedDB\https_www.bing.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/11/12-18:25:10.226 3dec Recovering log #4
+2026/11/12-18:25:10.227 3dec Reusing old log C:\Users\User\projects\AI_automation_on_browser\chrome-profile\Default\IndexedDB\https_www.bing.com_0.indexeddb.leveldb/000004.log 
+2026/11/12-18:27:54.551 3dec Level-0 table #8: started
+2026/11/12-18:27:54.553 3dec Level-0 table #8: 7638 bytes OK
+2026/11/12-18:27:54.555 3dec Delete type=0 #4
+2026/11/12-18:27:54.556 3dec Manual compaction at level-0 from (begin) .. (end); will stop at (end)
+2026/11/12-18:27:54.556 3dec Manual compaction at level-1 from (begin) .. (end); will stop at '\x00\x02\x01\x03\x01\x08\x002\x000\x002\x006\x001\x001\x001\x007' @ 127 : 1
+2026/11/12-18:27:54.557 3dec Compacting 1@1 + 1@2 files
+2026/11/12-18:27:54.559 3dec Generated table #9@1: 39 keys, 5871 bytes
+2026/11/12-18:27:54.559 3dec Compacted 1@1 + 1@2 files => 5871 bytes
+2026/11/12-18:27:54.560 3dec compacted to: files[ 0 0 1 0 0 0 0 ]
+2026/11/12-18:27:54.561 3dec Delete type=2 #5
+2026/11/12-18:27:54.561 3dec Delete type=2 #8
+2026/11/12-18:27:54.562 3dec Manual compaction at level-1 from '\x00\x02\x01\x03\x01\x08\x002\x000\x002\x006\x001\x001\x001\x007' @ 127 : 1 .. (end); will stop at (end)

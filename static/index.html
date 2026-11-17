@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Browser Agent</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+  /* One fixed screen, no page scroll: only the chat list, the chat itself and the sidebar scroll inside their own boxes. */
+  html, body { height: 100%; overflow: hidden; }
+  .app { height: 100vh; height: 100dvh; display: flex; flex-direction: column; padding-bottom: .5rem; overflow: hidden; }
+  .app > div:first-child { flex: 0 0 auto; }
+  .main { flex: 1 1 0; min-height: 0; flex-wrap: nowrap; overflow: hidden; }
+  .main > div { min-height: 0; min-width: 0; height: 100%; }
+  #chatCol { overflow: hidden; }
+  #chat { flex: 1 1 0 !important; min-height: 0; overflow-y: auto; }
+  #form { flex: 0 0 auto; }
+  #liveCol { overflow: hidden !important; }
+  #liveCard { height: 100%; display: flex; flex-direction: column; }
+  #liveCard .card-header { flex: 0 0 auto; }
+  #liveCard .card-body { flex: 1 1 0; min-height: 0; }
+  #sidebar #chats { flex: 1 1 0 !important; min-height: 0; }
+  .bubble { max-width: 92%; border-radius: 1rem; padding: .6rem .9rem; margin-bottom: .6rem; white-space: pre-wrap; word-wrap: break-word; }
+  .user { background: var(--bs-primary); color: #fff; margin-left: auto; border-bottom-right-radius: .2rem; }
+  .bot { background: var(--bs-tertiary-bg); border-bottom-left-radius: .2rem; }
+  .step { font-size: .8rem; color: var(--bs-secondary-color); margin: 0 0 .35rem .4rem; }
+  .step code { color: var(--bs-info); }
+  .sources a { display: block; font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #shot { width: 100%; height: 100%; object-fit: contain; object-position: top; border-radius: .5rem; border: 1px solid var(--bs-border-color); background: #000; }
+  #curl { font-size: .8rem; }
+  #chats { overflow-y: auto; }
+  .chat-item { cursor: pointer; border-radius: .4rem; padding: .35rem .5rem; font-size: .85rem; display: flex; justify-content: space-between; gap: .4rem; }
+  .chat-item:hover { background: var(--bs-tertiary-bg); }
+  .chat-item.active { background: var(--bs-primary-bg-subtle); }
+  .chat-item span.t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-item .x { visibility: hidden; color: var(--bs-secondary-color); }
+  .chat-item:hover .x { visibility: visible; }
+</style>
+</head>
+<body>
+<div class="app container-fluid py-2">
+  <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+    <button id="menu" class="btn btn-sm btn-outline-secondary" title="Chat history" aria-label="Toggle chat history">&#9776;</button>
+    <h5 class="mb-0 me-2">🤖 Browser Agent</h5>
+    <select id="model" class="form-select form-select-sm w-auto"></select>
+    <select id="engine" class="form-select form-select-sm w-auto" title="Search engine">
+      <option value="bing" selected>Bing</option><option value="duckduckgo">DuckDuckGo</option>
+      <option value="google">Google</option><option value="brave">Brave Search</option>
+      <option value="startpage">Startpage</option></select>
+    <select id="browsermode" class="form-select form-select-sm w-auto" title="Which browser the agent controls">
+      <option value="test">Test browser</option><option value="chrome">My Chrome (signed in)</option></select>
+    <button id="launchchrome" class="btn btn-sm btn-outline-success d-none" title="Start Chrome with remote debugging (separate profile; sign in once)">Launch Chrome</button>
+    <div class="form-check form-switch mb-0"><input class="form-check-input" type="checkbox" id="headless"><label class="form-check-label small" for="headless">Headless</label></div>
+    <div class="input-group input-group-sm w-auto"><span class="input-group-text">Max steps</span><input id="steps" type="number" value="25" min="1" max="100" class="form-control" style="width:70px"></div>
+    <button id="loc" class="btn btn-sm btn-outline-info" title="Share your location with the agent (used for Google Maps directions)">📍 My location</button>
+    <span id="status" class="small text-body-secondary ms-auto">Idle</span>
+    <button id="take" class="btn btn-sm btn-outline-warning" title="Open the browser in a popup so you can type into it yourself (logins, captchas...)">Take over</button>
+    <button id="newchat" class="btn btn-sm btn-outline-secondary">New chat</button>
+    <button id="closebrowser" class="btn btn-sm btn-outline-secondary">Close browser</button>
+  </div>
+
+  <div class="row g-2 main">
+    <!-- Chat history sidebar: hidden by default, toggled by the hamburger button -->
+    <div id="sidebar" class="col-12 col-lg-2 d-none flex-column h-100">
+      <button id="newchat2" class="btn btn-sm btn-primary mb-2">+ New chat</button>
+      <div class="small text-body-secondary mb-1">Previous chats</div>
+      <div id="chats" class="flex-fill"></div>
+    </div>
+    <div id="chatCol" class="col-12 col-lg d-flex flex-column h-100">
+      <div id="chat" class="flex-fill border rounded p-3 mb-2">
+        <div class="text-body-secondary small" id="empty">Ask me to do something in the browser. The browser stays open between messages, so you can follow up on the page it is on.</div>
+      </div>
+      <form id="form" class="d-flex gap-2 align-items-end pt-1 pb-2">
+        <textarea id="task" class="form-control" rows="1" autocomplete="off" placeholder="Message the agent..." title="Enter to send, Shift+Enter for a new line" required style="resize:none;max-height:9.5rem;padding:.6rem .85rem;line-height:1.4"></textarea>
+        <button id="send" class="btn btn-primary px-4 py-2">Send</button>
+        <button id="stop" type="button" class="btn btn-outline-danger px-4 py-2" disabled>Stop</button>
+      </form>
+    </div>
+    <!-- Live view: the space is always reserved, but its content stays invisible until the agent sends its first screenshot -->
+    <div id="liveCol" class="col-12 col-lg-6 h-100 overflow-auto">
+      <div id="liveCard" class="card" style="visibility:hidden">
+        <div class="card-header d-flex justify-content-between"><span>Live view</span><a id="curl" href="#" target="_blank" rel="noopener" class="text-truncate ms-3"></a></div>
+        <div class="card-body p-2"><img id="shot" alt="Browser screenshot appears here"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="remoteModal" style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.75);align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:min(1100px,100%);max-height:100%;overflow:auto">
+    <div class="card-header d-flex align-items-center gap-2 py-2">
+      <div style="min-width:0"><b>Browser</b> <span class="small text-body-secondary">- click and type here; your input goes straight to the site. The agent and the AI model never see it.</span>
+        <div id="rurl" class="small text-truncate"></div></div>
+      <input id="rnote" class="form-control form-control-sm ms-auto" style="max-width:320px" autocomplete="off" placeholder="Optional note for the agent...">
+      <button id="rdone" class="btn btn-success btn-sm text-nowrap">Done - continue</button>
+    </div>
+    <div class="card-body p-2"><div id="rbox" style="outline:none;position:relative"><textarea id="rsink" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Keyboard input for the browser" style="position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;resize:none"></textarea><img id="rshot" alt="" style="width:100%;cursor:pointer;background:#000;border-radius:.4rem" draggable="false"></div></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let ws, stepBox = null, loc = null, asking = false, activeChat = null;
+try { loc = JSON.parse(localStorage.getItem('loc')); } catch (e) {}
+
+// Hamburger: show/hide the chat history sidebar
+$('menu').onclick = () => { $('sidebar').classList.toggle('d-none'); $('sidebar').classList.toggle('d-flex'); };
+// Live view: only appears once the agent actually starts browsing
+function showLive(on) { $('liveCard').style.visibility = on ? 'visible' : 'hidden'; if (!on) { $('shot').removeAttribute('src'); $('curl').textContent = ''; } }
+
+function showLoc() { $('loc').textContent = loc ? '📍 Location shared' : '📍 My location'; $('loc').classList.toggle('btn-info', !!loc); $('loc').classList.toggle('btn-outline-info', !loc); }
+// Ask this browser for the user's real position (the agent's own browser has none). Resolves null on failure.
+function getLoc(timeout = 10000) {
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(p => {
+      loc = {latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy};
+      try { localStorage.setItem('loc', JSON.stringify(loc)); } catch (e) {}
+      showLoc(); res(loc);
+    }, err => { $('status').textContent = 'Location unavailable: ' + err.message; res(null); },
+    {enableHighAccuracy: true, timeout, maximumAge: 300000});
+  });
+}
+$('loc').onclick = () => getLoc(15000);
+showLoc();
+getLoc();  // ask on page load so the permission prompt is out of the way before the first question
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = e => handle(JSON.parse(e.data));
+  ws.onclose = () => { setRunning(false); $('status').textContent = 'Disconnected'; setTimeout(connect, 1500); };
+}
+function setRunning(r) { $('send').disabled = r; $('stop').disabled = !r; }
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// escape, then turn bare URLs into links and **bold** into <b>
+const rich = s => esc(s).replace(/(https?:\/\/[^\s<)]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+function push(el) { $('empty')?.remove(); $('chat').appendChild(el); $('chat').scrollTop = 1e9; return el; }
+function bubble(cls, html) { const d = document.createElement('div'); d.className = 'bubble ' + cls; d.innerHTML = html; return push(d); }
+function addUser(t) { bubble('user', esc(t)); stepBox = null; }
+function addBot(text, links) {
+  let h = rich(text);
+  if (links && links.length) h += '<hr class="my-2"><div class="sources"><b class="small">🔗 Sources</b>' +
+    links.map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener" title="${esc(l.url)}">${esc(l.title)} <span class="text-body-secondary">— ${esc(l.url)}</span></a>`).join('') + '</div>';
+  bubble('bot', h);
+}
+function handle(m) {
+  if (m.type === 'screenshot') { $('rshot').src = 'data:image/jpeg;base64,' + m.data; $('rurl').textContent = m.url; showLive(true); $('shot').src = 'data:image/jpeg;base64,' + m.data; $('curl').textContent = m.url; $('curl').href = m.url; }
+  else if (m.type === 'status') $('status').textContent = m.text;
+  else if (m.type === 'browser_mode') { $('browsermode').value = m.mode; $('browsermode').onchange(); }
+  else if (m.type === 'step') {
+    const d = document.createElement('div'); d.className = 'step';
+    d.innerHTML = `#${m.n} <code>${esc(m.action)}</code> · ${esc(m.thought)}`; push(d);
+  }
+  else if (m.type === 'answer') addBot(m.text, m.links);
+  else if (m.type === 'question') {  // the agent needs input (e.g. booking details): your next message is the reply
+    asking = true; $('send').disabled = false;
+    const loginQ = m.login || /sign.?in|log.?in|password|credential/i.test(m.text);
+    const qb = bubble('bot border border-info', '❓ ' + rich(m.text) + (loginQ ? '<div class="mt-2"><button class="btn btn-sm btn-warning" data-open-remote>🔑 Open login window</button> <button class="btn btn-sm btn-success" data-continue>✔ I\'m done, continue</button> <span class="small text-body-secondary">or type a reply below</span></div>' : ''));
+    qb.querySelector('[data-open-remote]')?.addEventListener('click', openRemote);
+    qb.querySelector('[data-continue]')?.addEventListener('click', e => { e.target.disabled = true; $('rdone').click(); });
+    if (loginQ) openRemote(); $('task').placeholder = 'Type your answer...'; $('task').focus();
+  }
+  else if (m.type === 'error') bubble('bot border border-danger', '⚠️ ' + esc(m.text));
+  else if (m.type === 'finished') { asking = false; $('task').placeholder = 'Message the agent...'; setRunning(false); $('status').textContent = 'Idle'; }
+  else if (m.type === 'history') {
+    $('chat').innerHTML = ''; stepBox = null; asking = false;
+    (m.messages || []).forEach(x => x.role === 'user' ? addUser(x.text) : addBot(x.text, x.links));
+    if (!(m.messages || []).length) $('chat').innerHTML = '<div class="text-body-secondary small" id="empty">Ask me to do something in the browser. The browser stays open between messages, so you can follow up on the page it is on.</div>';
+    activeChat = m.chat_id; setRunning(m.busy); loadChats();
+  }
+}
+$('form').onsubmit = async e => {
+  e.preventDefault();
+  const t = $('task').value.trim(); if (!t) return;
+  addUser(t); $('task').value = '';
+  if (asking) {  // answering the agent's question: no new run, just hand the text back
+    asking = false; $('task').placeholder = 'Message the agent...'; $('send').disabled = true;
+    ws.send(JSON.stringify({type: 'answer', text: t}));
+    return;
+  }
+  setRunning(true);
+  setTimeout(loadChats, 400);
+  await getLoc(6000);  // refresh the position for this request; falls back to the last known one
+  ws.send(JSON.stringify({type: 'run', task: t, model: $('model').value, engine: $('engine').value,
+    headless: $('headless').checked, browser: $('browsermode').value, location: loc, max_steps: $('steps').value}));
+  setRunning(true);
+};
+const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
+function openRemote() { $('remoteModal').style.display = 'flex'; send({type: 'remote_start'}); setTimeout(() => $('rsink').focus(), 300); }
+$('take').onclick = openRemote;
+$('rdone').onclick = () => {
+  send({type: 'remote_stop'}); $('remoteModal').style.display = 'none';
+  if (asking) { const note = $('rnote').value.trim(); $('rnote').value = ''; const t = 'I have finished in the browser, continue.' + (note ? ' ' + note : ''); addUser(t); asking = false; $('send').disabled = true; send({type: 'answer', text: t}); }
+};
+$('rshot').onclick = e => { const r = e.target.getBoundingClientRect(); send({type: 'remote_click', x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height}); $('rsink').focus(); };
+$('rbox').addEventListener('wheel', e => { e.preventDefault(); send({type: 'remote_scroll', dy: e.deltaY}); }, {passive: false});
+const sink = $('rsink');
+sink.addEventListener('paste', e => { e.preventDefault(); const x = e.clipboardData.getData('text'); if (x) send({type: 'remote_text', text: x}); });
+sink.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey) return;  // let ctrl+v paste through
+  if (e.key.length === 1) { e.preventDefault(); send({type: 'remote_text', text: e.key}); }       // printable character
+  else if (e.key !== 'Process' && e.key !== 'Unidentified' && e.key !== 'Dead') { e.preventDefault(); send({type: 'remote_key', key: e.key}); }  // Enter, Tab, Backspace, arrows...
+});
+// anything typed that did not come as a plain key press (IME, on-screen/virtual keyboards, autofill) arrives as an input event
+sink.addEventListener('input', e => { const x = sink.value; sink.value = ''; if (x) send({type: 'remote_text', text: x}); });
+// multi-line box: grows with the text (up to ~6 lines), Enter sends, Shift+Enter adds a line
+const fit = () => { const el = $('task'); el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 152) + 'px'; };
+$('task').addEventListener('input', fit);
+$('task').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('form').requestSubmit(); } });
+$('form').addEventListener('submit', () => setTimeout(fit, 0));
+$('browsermode').onchange = () => {
+  const c = $('browsermode').value === 'chrome';
+  $('launchchrome').classList.toggle('d-none', !c); $('headless').disabled = c;
+  try { localStorage.setItem('browsermode', $('browsermode').value); } catch (e) {}
+};
+$('launchchrome').onclick = async () => {
+  $('status').textContent = 'Starting Chrome...';
+  const r = await fetch('/chrome/launch', {method: 'POST'}).then(r => r.json());
+  $('status').textContent = r.ok ? r.note : r.error;
+};
+try { const bm = localStorage.getItem('browsermode'); if (bm) { $('browsermode').value = bm; $('browsermode').onchange(); } } catch (e) {}
+$('stop').onclick = () => ws.send(JSON.stringify({type: 'stop'}));
+const newChat = () => ws.send(JSON.stringify({type: 'new_chat'}));
+$('newchat').onclick = newChat; $('newchat2').onclick = newChat;
+function loadChats() {
+  fetch('/chats').then(r => r.json()).then(d => {
+    activeChat = d.current;
+    $('chats').innerHTML = d.chats.map(c => `<div class="chat-item ${c.id === activeChat ? 'active' : ''}" data-id="${c.id}" title="${esc(c.title)}"><span class="t">${esc(c.title)}</span><span class="x" data-del="${c.id}">✕</span></div>`).join('')
+      || '<div class="small text-body-secondary">No saved chats yet.</div>';
+  }).catch(() => {});
+}
+$('chats').onclick = e => {
+  const del = e.target.dataset.del, item = e.target.closest('.chat-item');
+  if (del) { if (confirm('Delete this chat?')) fetch('/chats/' + del, {method: 'DELETE'}).then(() => { if (+del === activeChat) newChat(); else loadChats(); }); return; }
+  if (item && !$('send').disabled) ws.send(JSON.stringify({type: 'load_chat', id: +item.dataset.id}));
+};
+$('closebrowser').onclick = () => ws.send(JSON.stringify({type: 'close_browser'}));
+fetch('/models').then(r => r.json()).then(d => {
+  const list = d.models.length ? d.models : [d.default];
+  $('model').innerHTML = list.map(m => `<option ${m === d.default ? 'selected' : ''}>${m}</option>`).join('');
+  $('engine').value = d.engine;
+  if (d.error) bubble('bot border border-warning', '⚠️ ' + esc(d.error));
+});
+connect();
+</script>
+</body>
+</html>
